@@ -16,7 +16,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'vaulty-ai-app';
-const apiKey = ""; // Sistem samodejno uporabi ključ
+const apiKey = "AIzaSyBtRKYnFv7YvPjwEM9mcbl9oY0BpjCH5IU"; // Sistem samodejno uporabi ključ
 
 const MODELS = [
   { id: "v1-basic", name: "Vaulty 1.0 Basic", tier: "free", cost: 0.05 },
