@@ -1,169 +1,137 @@
 import React, { useState, useEffect } from "react";
-import { initializeApp } from "firebase/app";
 import { 
-  getFirestore, 
   collection, 
-  onSnapshot
+  onSnapshot, 
+  query, 
+  orderBy, 
+  limit,
+  getFirestore 
 } from "firebase/firestore";
-import { 
-  getAuth, 
-  signInAnonymously, 
-  signInWithCustomToken, 
-  onAuthStateChanged 
-} from "firebase/auth";
+import { initializeApp, getApps, getApp } from "firebase/app";
 import { X, Bell } from "lucide-react";
 
-// --- Firebase Configuration & Initialization ---
-// Uporabljamo globalne spremenljivke okolja
-const firebaseConfig = JSON.parse(__firebase_config);
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+// --- Firebase Initialization Fallback ---
+// Ker v okolju Canvas alias "@/lib/firebase" morda ni dosegljiv, 
+// uporabimo varno inicializacijo, ki uporablja vaše obstoječe nastavitve.
+let db: any;
+try {
+  // Poskusimo dobiti obstoječo instanco ali inicializirati z okoljskimi spremenljivkami
+  const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+  const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+  db = getFirestore(app);
+} catch (e) {
+  console.error("Firebase initialization error:", e);
+}
 
-/**
- * HeadsUpNotification Komponenta
- * Izvažamo kot poimenovano funkcijo, da ustreza uvozu v App.tsx
- */
+interface HeadsUpNotif {
+  id: string;
+  message: string;
+  timestamp: any;
+}
+
 export function HeadsUpNotification() {
-  const [notification, setNotification] = useState<any>(null);
+  const [notification, setNotification] = useState<HeadsUpNotif | null>(null);
   const [isVisible, setIsVisible] = useState(false);
-  const [user, setUser] = useState<any>(null);
-  const [progress, setProgress] = useState(100);
 
-  // 1. Avtentikacija (RULE 3)
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (err) {
-        // Tihi fail za background proces
-      }
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, setUser);
-    return () => unsubscribe();
-  }, []);
+    if (!db) return;
 
-  // 2. Poslušalec za obvestila v realnem času
-  useEffect(() => {
-    if (!user) return;
-
-    // RULE 1: Stroga pot do kolekcije
-    const notificationsRef = collection(db, 'artifacts', appId, 'public', 'data', 'global_notifications');
-    
-    // RULE 2: Pridobimo vse in razvrstimo v spominu (brez kompleksnih queryjev)
-    const unsubscribe = onSnapshot(
-      notificationsRef,
-      (snapshot) => {
-        const docs = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-
-        // Razvrščanje po času v JS
-        const sortedDocs = docs.sort((a: any, b: any) => {
-          const timeA = a.timestamp?.seconds || 0;
-          const timeB = b.timestamp?.seconds || 0;
-          return timeB - timeA;
-        });
-
-        const latest = sortedDocs[0];
-
-        // Prikaži obvestilo, če je od admina
-        if (latest && (latest.fromSuperAdmin || latest.isAdmin)) {
-          setNotification(latest);
-          setIsVisible(true);
-          setProgress(100);
-
-          const duration = 6000;
-          const intervalTime = 100;
-          const step = (intervalTime / duration) * 100;
-
-          const timer = setTimeout(() => {
-            setIsVisible(false);
-          }, duration);
-
-          const progressInterval = setInterval(() => {
-            setProgress(prev => Math.max(0, prev - step));
-          }, intervalTime);
-
-          return () => {
-            clearTimeout(timer);
-            clearInterval(progressInterval);
-          };
-        }
-      },
-      (error) => {
-        console.error("Firestore error:", error);
-      }
+    // Logika ostaja identična tvoji originalni
+    const q = query(
+      collection(db, "global_notifications"),
+      orderBy("timestamp", "desc"),
+      limit(1)
     );
 
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === "added") {
+          const doc = change.doc;
+          const data = doc.data();
+          
+          if (data.fromSuperAdmin || data.isAdmin) {
+            setNotification({
+              id: doc.id,
+              message: data.message,
+              timestamp: data.timestamp
+            });
+            setIsVisible(true);
+
+            const timer = setTimeout(() => {
+              setIsVisible(false);
+            }, 5000);
+
+            return () => clearTimeout(timer);
+          }
+        }
+      });
+    }, (error) => {
+      console.error("Firestore error:", error);
+    });
+
     return () => unsubscribe();
-  }, [user]);
+  }, []);
 
   if (!isVisible || !notification) return null;
 
   return (
     <div className="fixed top-6 left-0 right-0 z-[9999] flex justify-center pointer-events-none px-4">
       <div className="relative group pointer-events-auto">
-        {/* Odsevni sij (Glow) v ozadju */}
-        <div className="absolute -inset-1 bg-gradient-to-r from-blue-500/20 to-indigo-600/20 rounded-full blur-2xl opacity-50 group-hover:opacity-80 transition duration-1000"></div>
+        {/* Zunanji sij za globino */}
+        <div className="absolute -inset-1 bg-gradient-to-r from-blue-500/30 to-purple-600/30 rounded-full blur-xl opacity-50 group-hover:opacity-70 transition duration-1000"></div>
         
-        {/* Glavna Glass kapsula */}
-        <div className="relative flex items-center gap-4 bg-black/40 backdrop-blur-3xl border border-white/10 rounded-full px-6 py-3 min-w-[300px] max-w-md shadow-[0_20px_50px_rgba(0,0,0,0.5)] animate-in slide-in-from-top-4 duration-500">
+        {/* Glavna steklena kapsula */}
+        <div className="relative flex items-center gap-4 bg-white/10 backdrop-blur-2xl border border-white/20 rounded-full px-6 py-3 min-w-[300px] max-w-sm shadow-[0_15px_35px_rgba(0,0,0,0.4)] animate-in slide-in-from-top-4 duration-500">
           
-          {/* Ikona s pulzirajočim efektom */}
-          <div className="relative shrink-0">
-            <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-white/10 to-white/5 flex items-center justify-center border border-white/10 shadow-inner">
-              <Bell className="h-5 w-5 text-blue-400 animate-pulse" />
+          {/* Ikona z nežnim pulziranjem */}
+          <div className="shrink-0 relative">
+            <div className="h-10 w-10 rounded-full bg-white/5 flex items-center justify-center border border-white/10 shadow-inner">
+              <Bell className="h-5 w-5 text-white animate-pulse" />
             </div>
-            <div className="absolute top-0 right-0 h-2.5 w-2.5 bg-blue-500 rounded-full border-2 border-[#121212]"></div>
+            {/* Indikator statusa */}
+            <div className="absolute -top-0.5 -right-0.5 h-3 w-3 bg-blue-400 rounded-full border-2 border-[#121212] shadow-sm"></div>
           </div>
-
-          {/* Vsebina obvestila */}
-          <div className="flex-1 min-w-0 pr-1">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold tracking-tighter uppercase text-blue-400/80">
-                Sistemsko sporočilo
-              </span>
-            </div>
-            <p className="text-white/90 text-sm font-medium leading-tight line-clamp-2">
+          
+          {/* Besedilo z boljšo tipografijo */}
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-bold tracking-[0.15em] text-blue-300 uppercase opacity-90 mb-0.5">Vaulty</p>
+            <p className="text-white text-sm font-medium leading-tight line-clamp-2 drop-shadow-md">
               {notification.message}
             </p>
           </div>
 
-          {/* Gumb za zaprtje */}
+          {/* Gumb za zapiranje z rotacijo ob hoverju */}
           <button
             onClick={() => setIsVisible(false)}
-            className="p-1.5 hover:bg-white/10 rounded-full transition-colors group/btn"
+            className="p-1.5 hover:bg-white/10 rounded-full transition-all group/close"
           >
-            <X className="h-4 w-4 text-white/30 group-hover/btn:text-white transition-transform group-hover/btn:rotate-90" />
+            <X className="h-4 w-4 text-white/40 group-hover/close:text-white group-hover/close:rotate-90 transition-all duration-300" />
           </button>
 
-          {/* Elegantna spodnja črta (Progress) */}
-          <div className="absolute bottom-1.5 left-10 right-10 h-[1px] bg-white/5 rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-blue-500/60 shadow-[0_0_8px_rgba(59,130,246,0.5)] transition-all duration-100 ease-linear"
-              style={{ width: `${progress}%` }}
-            />
+          {/* Elegantna spodnja animirana linija napredka */}
+          <div className="absolute bottom-1.5 left-12 right-12 h-[1px] bg-white/5 rounded-full overflow-hidden">
+            <div className="h-full w-full animate-progress-glow"></div>
           </div>
         </div>
       </div>
 
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style>{`
+        @keyframes progress-glow {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+        .animate-progress-glow {
+          animation: progress-glow 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+          background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.6), transparent);
+        }
         @keyframes slide-in-from-top-4 {
-          from { transform: translateY(-1rem); opacity: 0; }
+          from { transform: translateY(-1.5rem); opacity: 0; }
           to { transform: translateY(0); opacity: 1; }
         }
         .animate-in {
-          animation: slide-in-from-top-4 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+          animation: slide-in-from-top-4 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
-      `}} />
+      `}</style>
     </div>
   );
 }
