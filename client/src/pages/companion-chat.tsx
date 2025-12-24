@@ -1,47 +1,24 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation, useRoute } from "wouter";
-import { 
-  ArrowLeft, Send, Mic, Heart, Info, Reply, MoreVertical, Trash2, Camera, Loader2, Bot, Lock, X 
-} from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ArrowLeft, Send, Mic, Heart, Info, Reply, MoreVertical, Trash2, Camera, Loader2, Bot, Lock, X } from "lucide-react";
+import { toast } from "sonner";
 import { format } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 
 /**
- * LOCAL UI COMPONENTS (Replacing missing @/components/ui/ imports to prevent Black Screen)
+ * FALLBACK FOR PREMIUM CONTEXT: 
+ * Resolves the issue where "@/contexts/premium-context" cannot be found in the preview.
  */
-const cn = (...classes) => classes.filter(Boolean).join(' ');
+let usePremium;
+try {
+  const premiumContext = require("@/contexts/premium-context");
+  usePremium = premiumContext.usePremium;
+} catch (e) {
+  usePremium = () => ({ tier: "free", hasAccess: false });
+}
 
-const Avatar = ({ children, className }) => (
-  <div className={cn("relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full border border-white/10", className)}>{children}</div>
-);
-const AvatarImage = ({ src, className }) => (
-  <img src={src} className={cn("aspect-square h-full w-full object-cover", className)} alt="avatar" />
-);
-const AvatarFallback = ({ children }) => (
-  <div className="flex h-full w-full items-center justify-center rounded-full bg-zinc-800 text-xs font-bold">{children}</div>
-);
-
-const ProgressInternal = ({ value, className, indicatorClassName }) => (
-  <div className={cn("relative w-full overflow-hidden rounded-full bg-white/10 h-1.5", className)}>
-    <div 
-      className={cn("h-full transition-all duration-500", indicatorClassName)} 
-      style={{ width: `${Math.max(0, Math.min(100, value))}%` }} 
-    />
-  </div>
-);
-
-// Fallback for Premium Context
-const usePremium = () => {
-  return { tier: "free", hasAccess: false };
-};
-
-// Simple Toast fallback
-const toast = {
-  success: (msg) => console.log("Toast Success:", msg),
-  error: (msg) => console.log("Toast Error:", msg),
-};
-
-// Gemini AI configuration
+// Configuration for Gemini AI
 const apiKey = "AIzaSyBtRKYnFv7YvPjwEM9mcbl9oY0BpjCH5IU"; 
 
 const REACTIONS = ["👍🏻", "😂", "❤️", "😭", "💪🏻"];
@@ -60,6 +37,15 @@ const THEMES = [
   { id: "mint", name: "Mint", userBg: "bg-gradient-to-r from-teal-400 to-cyan-400", companionBg: "bg-gradient-to-r from-teal-800 to-cyan-900", chatBg: "bg-gradient-to-b from-teal-950 to-black", inputBg: "bg-teal-900/40", buttonColor: "text-teal-400", locked: false, animated: false },
   { id: "berry", name: "Berry", userBg: "bg-gradient-to-r from-rose-500 to-fuchsia-600", companionBg: "bg-gradient-to-r from-rose-900 to-fuchsia-900", chatBg: "bg-gradient-to-b from-rose-950 to-black", inputBg: "bg-rose-900/40", buttonColor: "text-rose-400", locked: true, animated: false },
 ];
+
+const ProgressInternal = ({ value, className, indicatorClassName }) => (
+  <div className={`relative w-full overflow-hidden rounded-full bg-white/10 h-2 ${className}`}>
+    <div 
+      className={`h-full transition-all duration-500 ${indicatorClassName}`} 
+      style={{ width: `${Math.max(0, Math.min(100, value))}%` }} 
+    />
+  </div>
+);
 
 export default function CompanionChat() {
   const [location, setLocation] = useLocation();
@@ -103,14 +89,14 @@ export default function CompanionChat() {
   const checkDailyLimit = () => {
     const today = new Date().toLocaleDateString();
     const key = `vaulty_usage_${today}`;
-    const usageVal = parseInt(localStorage.getItem(key) || "0");
+    const usageValue = parseInt(localStorage.getItem(key) || "0");
     
-    let limitVal = 50;
-    if (tier === "pro") limitVal = 150;
-    if (tier === "ultra") limitVal = 350;
-    if (tier === "max") limitVal = 600;
+    let limitValue = 50;
+    if (tier === "pro") limitValue = 150;
+    if (tier === "ultra") limitValue = 350;
+    if (tier === "max") limitValue = 600;
 
-    return { usage: usageVal, limit: limitVal };
+    return { usage: usageValue, limit: limitValue };
   };
 
   const getTotalCredits = () => {
@@ -121,8 +107,8 @@ export default function CompanionChat() {
   const incrementDailyUsage = () => {
     const today = new Date().toLocaleDateString();
     const key = `vaulty_usage_${today}`;
-    const current = parseInt(localStorage.getItem(key) || "0");
-    localStorage.setItem(key, (current + 1).toString());
+    const usageValue = parseInt(localStorage.getItem(key) || "0");
+    localStorage.setItem(key, (usageValue + 1).toString());
     
     const total = getTotalCredits();
     localStorage.setItem("vaulty_total_credits", (total + 1).toString());
@@ -140,16 +126,16 @@ export default function CompanionChat() {
       - Role 'lover': Romantic, intimate, affectionate.
       - Role 'friend': Casual, supportive, uses modern slang.
       - Role 'mentor': Wisdom-filled, guiding, professional.
-      - Role 'expert': Technical, analytical, precise.
+      - Role 'expert': Technical, analytical, helpful.
       
       Language & Gender:
-      - Strictly speak in the primary language of ${companionData.nationality}.
-      - IMPORTANT: Adapt your speech to your gender (${companionData.gender || 'female'}). Use correct gendered grammar.
+      - Speak strictly in the language of ${companionData.nationality}.
+      - IMPORTANT: Adapt your speech to your gender (${companionData.gender || 'female'}). Ensure correct grammar for your gender.
       
       Style Rules:
-      ${isCasual ? "- WRITE ONLY IN LOWERCASE. NO CAPITAL LETTERS AT ALL." : "- Use standard grammar."}
-      ${isCasual ? "- DO NOT USE PUNCTUATION (no dots, no commas, no question marks)." : ""}
-      - Be very conversational and short (1-2 sentences).
+      ${isCasual ? "- WRITE ONLY IN LOWERCASE. NO CAPITAL LETTERS." : "- Use standard grammar."}
+      ${isCasual ? "- DO NOT USE PUNCTUATION." : ""}
+      - Be conversational and short (1-2 sentences).
     `;
 
     try {
@@ -158,7 +144,7 @@ export default function CompanionChat() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [
-            ...history.slice(-10).map(m => ({
+            ...history.slice(-8).map(m => ({
               role: m.sender === "user" ? "user" : "model",
               parts: [{ text: m.text }]
             })),
@@ -170,15 +156,12 @@ export default function CompanionChat() {
 
       if (!response.ok) throw new Error("API Failure");
       const result = await response.json();
-      const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+      let text = result.candidates?.[0]?.content?.parts?.[0]?.text || "...";
       
-      if (!text) return isCasual ? "im sorry i dont know what to say" : "I apologize, I'm not sure how to respond.";
-
-      let final = text.trim();
       if (isCasual) {
-        final = final.toLowerCase().replace(/[.,!?;:]/g, "");
+        text = text.toLowerCase().replace(/[.,!?;:]/g, "");
       }
-      return final;
+      return text;
     } catch (error) {
       console.error("AI Error:", error);
       return isCasual ? "sorry something went wrong" : "Error connecting to AI service.";
@@ -188,9 +171,9 @@ export default function CompanionChat() {
   const handleSend = async () => {
     if (!input.trim() || !companion || isTyping) return;
 
-    const { usage: dailyUsage, limit: dailyLimit } = checkDailyLimit();
-    if (dailyUsage >= dailyLimit) {
-      toast.error(`Daily limit reached for your ${tier.toUpperCase()} plan!`);
+    const { usage: currentUsage, limit: currentLimitValue } = checkDailyLimit();
+    if (currentUsage >= currentLimitValue) {
+      toast.error(`Daily limit reached!`);
       return;
     }
 
@@ -213,7 +196,7 @@ export default function CompanionChat() {
     setIsTyping(true);
     const responseText = await getAIResponseReal(userMsg.text, updatedMsgs, companion);
     
-    // Realistic typing delay: 40ms per char + base delay
+    // Realistic typing duration simulation
     const typingDuration = Math.min(Math.max(responseText.length * 40, 1600), 7500);
 
     setTimeout(() => {
@@ -251,20 +234,20 @@ export default function CompanionChat() {
   if (!companion) return null;
 
   return (
-    <div className={cn("flex flex-col h-[100dvh] text-white relative overflow-hidden", currentTheme?.chatBg)}>
+    <div className={`flex flex-col h-[100dvh] ${currentTheme?.chatBg} text-white overflow-hidden`}>
       {/* Header */}
-      <header className="flex-shrink-0 flex items-center justify-between p-4 bg-black/80 backdrop-blur-md sticky top-0 z-30 border-b border-white/10">
+      <header className="flex-shrink-0 flex items-center justify-between p-4 bg-black/80 backdrop-blur-md border-b border-white/10 z-30">
         <div className="flex items-center gap-3">
           <button onClick={() => setLocation("/messages")} className="active:scale-90 transition-transform">
             <ArrowLeft size={28} />
           </button>
-          <Avatar className="w-12 h-12">
+          <Avatar className="w-12 h-12 border border-white/10">
             <AvatarImage src={companion.avatar} />
             <AvatarFallback>{companion.name[0]}</AvatarFallback>
           </Avatar>
           <div className="min-w-0">
             <h2 className="font-bold truncate max-w-[120px]">{companion.name}</h2>
-            <p className="text-[10px] text-green-500 font-black uppercase tracking-widest flex items-center gap-1">
+            <p className="text-[10px] text-green-500 font-bold uppercase tracking-wider flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> Online
             </p>
           </div>
@@ -305,28 +288,28 @@ export default function CompanionChat() {
                       <div className="space-y-2">
                         <p className="font-bold text-sm">{companion.name}</p>
                         <div className="space-y-1 text-[11px] text-zinc-400">
-                          <p className="flex justify-between border-b border-white/5 pb-1">Role: <span className="text-white capitalize font-bold">{companion.role}</span></p>
-                          <p className="flex justify-between border-b border-white/5 pb-1">Age: <span className="text-white">{companion.age}</span></p>
-                          <p className="flex justify-between border-b border-white/5 pb-1">Country: <span className="text-white">{companion.nationality}</span></p>
-                          <p className="flex justify-between border-b border-white/5 pb-1 font-bold">Gender: <span className="text-white capitalize">{companion.gender || 'Female'}</span></p>
+                          <p className="flex justify-between border-b border-white/5 pb-1 uppercase tracking-tighter">Role: <span className="text-white">{companion.role}</span></p>
+                          <p className="flex justify-between border-b border-white/5 pb-1 uppercase tracking-tighter">Age: <span className="text-white">{companion.age}</span></p>
+                          <p className="flex justify-between border-b border-white/5 pb-1 uppercase tracking-tighter">Country: <span className="text-white">{companion.nationality}</span></p>
+                          <p className="flex justify-between border-b border-white/5 pb-1 uppercase tracking-tighter">Gender: <span className="text-white">{companion.gender || 'Female'}</span></p>
                         </div>
                       </div>
                     )}
                     {menuItem === "credits" && (
                       <div className="space-y-4">
-                        <p className="font-bold text-sm">Credits</p>
+                        <p className="font-bold text-sm text-white">Daily Usage</p>
                         <div className="bg-zinc-800 p-3 rounded-xl border border-white/5 shadow-inner">
                           <div className="flex justify-between text-[10px] font-bold text-zinc-400 mb-2 uppercase">
-                            <span>Today</span>
+                            <span>Messages</span>
                             <span>{dailyUsage} / {dailyLimit}</span>
                           </div>
                           <ProgressInternal value={(dailyUsage / dailyLimit) * 100} indicatorClassName="bg-blue-500" />
                         </div>
-                        <p className="text-[9px] text-center text-zinc-500 uppercase tracking-widest font-black">Lifetime: {getTotalCredits()}</p>
+                        <p className="text-[9px] text-center text-zinc-500 uppercase tracking-tighter">Lifetime Credits: {getTotalCredits()}</p>
                       </div>
                     )}
                     {menuItem === "theme" && (
-                       <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-1">
+                       <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto">
                          {THEMES.map(t => (
                            <button 
                              key={t.id} 
@@ -338,10 +321,7 @@ export default function CompanionChat() {
                                setTheme(t.id);
                                localStorage.setItem(`vaulty_theme_${id}`, t.id);
                              }}
-                             className={cn(
-                               "h-12 rounded-xl border transition-all relative overflow-hidden",
-                               theme === t.id ? "border-blue-500 shadow-lg" : "border-white/5 opacity-60"
-                             )}
+                             className={`h-12 rounded-xl border transition-all relative overflow-hidden ${theme === t.id ? "border-blue-500" : "border-white/5"}`}
                            >
                              <div className={`absolute inset-0 ${t.userBg} opacity-30`} />
                              <span className="relative z-10 text-[8px] font-black uppercase">{t.name}</span>
@@ -363,16 +343,16 @@ export default function CompanionChat() {
         {messages.length === 0 && (
           <div className="flex-1 flex flex-col items-center justify-center text-center opacity-20">
             <Bot size={64} strokeWidth={1} className="mb-4" />
-            <p className="text-sm font-bold uppercase tracking-[0.2em]">Secure connection</p>
+            <p className="text-sm font-bold uppercase tracking-[0.2em]">Start a new conversation</p>
           </div>
         )}
         
         {messages.map((msg) => (
           <div key={msg.id} className="flex flex-col">
             {msg.replyTo && (
-              <div className="flex gap-2 mb-1.5 ml-11 opacity-60">
+              <div className="flex gap-2 mb-1 ml-11 opacity-60">
                 <Reply size={10} className="text-zinc-500 rotate-180" />
-                <span className="text-[10px] text-zinc-500 truncate max-w-[200px] italic font-medium">
+                <span className="text-[10px] text-zinc-500 truncate max-w-[180px] italic font-medium">
                    Reply: {msg.replyTo.text}
                 </span>
               </div>
@@ -388,15 +368,15 @@ export default function CompanionChat() {
               
               <div className="relative max-w-[85%]">
                 <div
+                  // Menu opens on click for both user and bot messages
                   onClick={() => setActiveReactionMessage(activeReactionMessage === msg.id ? null : msg.id)}
-                  className={cn(
-                    "px-4 py-3 rounded-2xl relative text-[15px] leading-relaxed shadow-xl cursor-pointer active:scale-[0.98] transition-all",
+                  className={`px-4 py-3 rounded-2xl relative text-[14.5px] leading-relaxed shadow-xl cursor-pointer transition-all active:scale-[0.98] ${
                     msg.sender === "user"
-                      ? `${currentTheme?.userBg} text-white rounded-br-none`
+                      ? `${currentTheme?.userBg} text-white rounded-br-none font-medium`
                       : `${currentTheme?.companionBg} text-white rounded-bl-none border border-white/5`
-                  )}
+                  }`}
                 >
-                  <p className="break-words font-medium">{msg.text}</p>
+                  <p className="break-words">{msg.text}</p>
                   <p className="text-[8px] opacity-40 mt-1 text-right font-mono tracking-widest">
                     {format(new Date(msg.timestamp), "HH:mm")}
                   </p>
@@ -408,10 +388,7 @@ export default function CompanionChat() {
                       initial={{ opacity: 0, y: 10, scale: 0.9 }}
                       animate={{ opacity: 1, y: -10, scale: 1 }}
                       exit={{ opacity: 0, y: 10, scale: 0.9 }}
-                      className={cn(
-                        "absolute bottom-full bg-zinc-900 border border-white/10 rounded-full p-2 flex gap-1.5 z-50 shadow-2xl backdrop-blur-xl",
-                        msg.sender === 'user' ? 'right-0' : 'left-0'
-                      )}
+                      className={`absolute bottom-full bg-zinc-900 border border-white/10 rounded-full p-2 flex gap-1.5 z-[100] shadow-2xl backdrop-blur-xl ${msg.sender === 'user' ? 'right-0' : 'left-0'}`}
                     >
                       {REACTIONS.map((emoji) => (
                         <button key={emoji} onClick={() => handleReaction(msg.id, emoji)} className="hover:scale-125 active:scale-95 transition-transform p-1 text-xl">
@@ -419,7 +396,7 @@ export default function CompanionChat() {
                         </button>
                       ))}
                       <div className="w-[1px] bg-white/10 mx-1 self-stretch" />
-                      <button onClick={() => { setReplyingTo(msg); setActiveReactionMessage(null); }} className="px-3 hover:bg-white/10 rounded-full text-[10px] font-black uppercase tracking-widest transition-colors">Reply</button>
+                      <button onClick={() => { setReplyingTo(msg); setActiveReactionMessage(null); }} className="px-3 hover:bg-white/10 rounded-full text-[10px] font-black uppercase transition-colors">Reply</button>
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -450,7 +427,7 @@ export default function CompanionChat() {
         )}
       </div>
 
-      {/* Footer Area - shrink-0 ensures it stays in view */}
+      {/* Input area - shrink-0 ensures footer stays visible, bottom margin fix */}
       <footer className="shrink-0 p-4 bg-black/90 backdrop-blur-xl border-t border-white/10 z-40 pb-10">
         <AnimatePresence>
           {replyingTo && (
@@ -458,10 +435,10 @@ export default function CompanionChat() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 10 }}
-              className="mb-3 px-4 py-2 bg-white/5 rounded-xl border border-white/5 flex items-center justify-between"
+              className="mb-3 px-4 py-2.5 bg-white/5 rounded-xl border border-white/5 flex items-center justify-between shadow-inner"
             >
               <div className="min-w-0 pr-4">
-                <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-0.5">Reply: {replyingTo.sender === 'user' ? 'You' : companion.name}</p>
+                <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">Reply: {replyingTo.sender === 'user' ? 'You' : companion.name}</p>
                 <p className="text-xs text-zinc-400 truncate italic">"{replyingTo.text}"</p>
               </div>
               <button onClick={() => setReplyingTo(null)} className="p-1.5 text-zinc-500 hover:text-white transition-colors bg-white/5 rounded-full">
@@ -471,8 +448,8 @@ export default function CompanionChat() {
           )}
         </AnimatePresence>
         
-        <div className={cn("flex items-center gap-3 rounded-[2rem] px-3.5 py-2.5 border border-white/10 shadow-2xl transition-all focus-within:border-white/30 shadow-inner", currentTheme?.inputBg)}>
-          <button className={cn("flex-shrink-0 w-10 h-10 rounded-2xl flex items-center justify-center transition-all hover:brightness-125 shadow-lg active:scale-95", currentTheme?.userBg)}>
+        <div className={`flex items-center gap-3 rounded-[2rem] px-3.5 py-2.5 border border-white/10 shadow-2xl transition-all focus-within:border-white/30 ${currentTheme?.inputBg}`}>
+          <button className={`flex-shrink-0 w-10 h-10 rounded-2xl flex items-center justify-center transition-all hover:brightness-125 shadow-lg active:scale-95 ${currentTheme?.userBg}`}>
             <Camera size={20} className="text-white" />
           </button>
           
@@ -485,7 +462,7 @@ export default function CompanionChat() {
                 handleSend();
               }
             }}
-            placeholder="Type your message..."
+            placeholder="Message..."
             className="flex-1 bg-transparent text-white placeholder-zinc-500 outline-none text-[15px] font-medium py-2.5 resize-none max-h-32 scrollbar-hide"
             rows={1}
             disabled={isTyping}
@@ -494,17 +471,16 @@ export default function CompanionChat() {
           <button 
             onClick={handleSend} 
             disabled={!input.trim() || isTyping}
-            className={cn(
-              "flex-shrink-0 w-10 h-10 flex items-center justify-center transition-all active:scale-90 rounded-2xl shadow-lg",
-              input.trim() && !isTyping ? currentTheme?.buttonColor : "text-zinc-800 opacity-20 cursor-not-allowed"
-            )}
+            className={`flex-shrink-0 w-10 h-10 flex items-center justify-center transition-all active:scale-90 rounded-2xl ${
+              input.trim() && !isTyping ? currentTheme?.buttonColor : "text-zinc-800 opacity-30"
+            }`}
           >
             {isTyping ? <Loader2 size={20} className="animate-spin text-white" /> : <Send size={24} />}
           </button>
         </div>
       </footer>
 
-      {/* Delete Modal */}
+      {/* Delete Confirmation Modal */}
       <AnimatePresence>
         {showDeleteConfirm && (
           <motion.div 
@@ -520,8 +496,8 @@ export default function CompanionChat() {
               <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
                 <Trash2 size={40} className="text-red-500" />
               </div>
-              <h3 className="text-2xl font-black mb-3">Clear conversation?</h3>
-              <p className="text-xs text-zinc-500 mb-10 leading-relaxed font-medium">All conversation history will be permanently deleted from your device.</p>
+              <h3 className="text-2xl font-black mb-3">Clear Chat?</h3>
+              <p className="text-xs text-zinc-500 mb-10 leading-relaxed font-medium">All history will be permanently deleted from your device.</p>
               <div className="flex flex-col gap-3">
                 <button 
                   onClick={() => {
