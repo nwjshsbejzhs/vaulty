@@ -3,8 +3,7 @@ import { initializeApp } from "firebase/app";
 import { 
   getFirestore, 
   collection, 
-  onSnapshot, 
-  query
+  onSnapshot
 } from "firebase/firestore";
 import { 
   getAuth, 
@@ -15,19 +14,24 @@ import {
 import { X, Bell } from "lucide-react";
 
 // --- Firebase Configuration & Initialization ---
+// Uporabljamo globalne spremenljivke okolja
 const firebaseConfig = JSON.parse(__firebase_config);
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
-export default function App() {
-  const [notification, setNotification] = useState(null);
+/**
+ * HeadsUpNotification Komponenta
+ * Izvažamo kot poimenovano funkcijo, da ustreza uvozu v App.tsx
+ */
+export function HeadsUpNotification() {
+  const [notification, setNotification] = useState<any>(null);
   const [isVisible, setIsVisible] = useState(false);
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState<any>(null);
   const [progress, setProgress] = useState(100);
 
-  // 1. Authentication Lifecycle (RULE 3)
+  // 1. Avtentikacija (RULE 3)
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -37,7 +41,7 @@ export default function App() {
           await signInAnonymously(auth);
         }
       } catch (err) {
-        // Silent fail for background auth
+        // Tihi fail za background proces
       }
     };
     initAuth();
@@ -45,14 +49,14 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // 2. Real-time Notifications Listener
+  // 2. Poslušalec za obvestila v realnem času
   useEffect(() => {
     if (!user) return;
 
-    // RULE 1: Strict collection path
+    // RULE 1: Stroga pot do kolekcije
     const notificationsRef = collection(db, 'artifacts', appId, 'public', 'data', 'global_notifications');
     
-    // RULE 2: Fetch all and sort/filter in memory to avoid index requirements
+    // RULE 2: Pridobimo vse in razvrstimo v spominu (brez kompleksnih queryjev)
     const unsubscribe = onSnapshot(
       notificationsRef,
       (snapshot) => {
@@ -61,8 +65,8 @@ export default function App() {
           ...doc.data()
         }));
 
-        // Sort by timestamp in memory (Rule 2)
-        const sortedDocs = docs.sort((a, b) => {
+        // Razvrščanje po času v JS
+        const sortedDocs = docs.sort((a: any, b: any) => {
           const timeA = a.timestamp?.seconds || 0;
           const timeB = b.timestamp?.seconds || 0;
           return timeB - timeA;
@@ -70,7 +74,7 @@ export default function App() {
 
         const latest = sortedDocs[0];
 
-        // Trigger notification visibility
+        // Prikaži obvestilo, če je od admina
         if (latest && (latest.fromSuperAdmin || latest.isAdmin)) {
           setNotification(latest);
           setIsVisible(true);
@@ -95,7 +99,7 @@ export default function App() {
         }
       },
       (error) => {
-        // Handle potential permission or connection errors
+        console.error("Firestore error:", error);
       }
     );
 
@@ -107,64 +111,57 @@ export default function App() {
   return (
     <div className="fixed top-6 left-0 right-0 z-[9999] flex justify-center pointer-events-none px-4">
       <div className="relative group pointer-events-auto">
-        {/* Glow Background Effect */}
-        <div className="absolute -inset-1 bg-gradient-to-r from-cyan-500/30 to-purple-600/30 rounded-full blur-xl opacity-40 group-hover:opacity-60 transition duration-1000"></div>
+        {/* Odsevni sij (Glow) v ozadju */}
+        <div className="absolute -inset-1 bg-gradient-to-r from-blue-500/20 to-indigo-600/20 rounded-full blur-2xl opacity-50 group-hover:opacity-80 transition duration-1000"></div>
         
-        {/* The Glass Pill */}
-        <div className="relative flex items-center gap-4 bg-white/10 backdrop-blur-3xl border border-white/20 rounded-full px-6 py-3 min-w-[320px] max-w-md shadow-[0_10px_40px_rgba(0,0,0,0.4)] animate-in slide-in-from-top-4 fade-in duration-500">
+        {/* Glavna Glass kapsula */}
+        <div className="relative flex items-center gap-4 bg-black/40 backdrop-blur-3xl border border-white/10 rounded-full px-6 py-3 min-w-[300px] max-w-md shadow-[0_20px_50px_rgba(0,0,0,0.5)] animate-in slide-in-from-top-4 duration-500">
           
-          {/* Icon with Ring */}
+          {/* Ikona s pulzirajočim efektom */}
           <div className="relative shrink-0">
-            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-white/20 to-transparent flex items-center justify-center border border-white/10">
-              <Bell className="h-5 w-5 text-white animate-bounce-subtle" />
+            <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-white/10 to-white/5 flex items-center justify-center border border-white/10 shadow-inner">
+              <Bell className="h-5 w-5 text-blue-400 animate-pulse" />
             </div>
-            <div className="absolute -top-0.5 -right-0.5 h-3 w-3 bg-cyan-400 rounded-full border-2 border-black/20 shadow-[0_0_10px_rgba(34,211,238,0.5)]"></div>
+            <div className="absolute top-0 right-0 h-2.5 w-2.5 bg-blue-500 rounded-full border-2 border-[#121212]"></div>
           </div>
 
-          {/* Message Content */}
-          <div className="flex-1 min-w-0 pr-2">
-            <div className="flex items-center gap-2 mb-0.5">
-              <span className="text-[9px] font-black tracking-[0.2em] uppercase text-cyan-400/90">
-                Vaulty Global
+          {/* Vsebina obvestila */}
+          <div className="flex-1 min-w-0 pr-1">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold tracking-tighter uppercase text-blue-400/80">
+                Sistemsko sporočilo
               </span>
             </div>
-            <p className="text-white text-sm font-medium leading-tight line-clamp-2 drop-shadow-sm">
+            <p className="text-white/90 text-sm font-medium leading-tight line-clamp-2">
               {notification.message}
             </p>
           </div>
 
-          {/* Exit Button */}
+          {/* Gumb za zaprtje */}
           <button
             onClick={() => setIsVisible(false)}
-            className="group/close p-1.5 hover:bg-white/10 rounded-full transition-all duration-300"
+            className="p-1.5 hover:bg-white/10 rounded-full transition-colors group/btn"
           >
-            <X className="h-4 w-4 text-white/40 group-hover/close:text-white group-hover/close:rotate-90 transition-all" />
+            <X className="h-4 w-4 text-white/30 group-hover/btn:text-white transition-transform group-hover/btn:rotate-90" />
           </button>
 
-          {/* Dynamic Progress Indicator */}
-          <div className="absolute bottom-1.5 left-8 right-8 h-[1px] bg-white/5 overflow-hidden rounded-full">
+          {/* Elegantna spodnja črta (Progress) */}
+          <div className="absolute bottom-1.5 left-10 right-10 h-[1px] bg-white/5 rounded-full overflow-hidden">
             <div 
-              className="h-full bg-gradient-to-r from-transparent via-cyan-400 to-transparent transition-all duration-100 ease-linear shadow-[0_0_8px_rgba(34,211,238,0.8)]"
-              style={{ width: `${progress}%`, margin: '0 auto' }}
+              className="h-full bg-blue-500/60 shadow-[0_0_8px_rgba(59,130,246,0.5)] transition-all duration-100 ease-linear"
+              style={{ width: `${progress}%` }}
             />
           </div>
         </div>
       </div>
 
       <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes bounce-subtle {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-2px); }
-        }
-        .animate-bounce-subtle {
-          animation: bounce-subtle 2s ease-in-out infinite;
-        }
         @keyframes slide-in-from-top-4 {
-          from { transform: translateY(-1.5rem); opacity: 0; }
+          from { transform: translateY(-1rem); opacity: 0; }
           to { transform: translateY(0); opacity: 1; }
         }
         .animate-in {
-          animation: slide-in-from-top-4 0.7s cubic-bezier(0.19, 1, 0.22, 1) forwards;
+          animation: slide-in-from-top-4 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
         }
       `}} />
     </div>
